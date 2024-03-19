@@ -3,84 +3,68 @@
 namespace App\Http\Controllers\admin;
 
 use App\Http\Controllers\Controller;
+use App\Models\Admin;
 use App\Models\User;
 use App\Traits\GeneralTrait;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Validator;
+use Tymon\JWTAuth\Exceptions\JWTException;
+use Tymon\JWTAuth\Facades\JWTAuth;
 
 class AuthController extends Controller
 {
     use GeneralTrait ;
-    public function login (Request $request){
+    public function login(Request $request)
+    {
 
-        $validator = Validator::make($request->all(),[
-            'email' => 'required|email',
-            'password' => 'required'
-        ]);
-        if($validator->fails()){
-            return \response()->json($validator->errors(), 422);
+        try {
+            $rules = [
+                "email" => "required",
+                "password" => "required"
+
+            ];
+
+            $validator = Validator::make($request->all(), $rules);
+
+            if ($validator->fails()) {
+                $code = $this->returnCodeAccordingToInput($validator);
+                return $this->returnValidationError($code, $validator);
+            }
+
+            //login
+
+            $credentials = $request->only(['email', 'password']);
+
+            $token = Auth::guard('admin')->attempt($credentials);
+
+            if (!$token)
+                return $this->returnError('E001', 'بيانات الدخول غير صحيحة');
+
+            $admin = Auth::guard('admin')->user();
+            $admin->api_token = $token;
+            //return token
+            return $this->returnData('admin', $admin);
+
+        } catch (\Exception $ex) {
+            return $this->returnError($ex->getCode(), $ex->getMessage());
         }
-        $credentials = $request->only(['email', 'password']);
-        $token = Auth::guard('api')->attempt($credentials);
-       if(!$token){
-        return $this->returnError(400,'some thing went wrong');
-       }
-            $user = \auth()->user();
-            $user ->api_token = $token ;
-            return $this->returnData('token',$user);
-
-    // try {
-    //     $rules = [
-    //         "email" => "required",
-    //         "password" => "required"
-
-    //     ];
-
-    //     $validator = Validator::make($request->all(), $rules);
-
-    //     if ($validator->fails()) {
-    //         $code = $this->returnCodeAccordingToInput($validator);
-    //         return $this->returnValidationError($code, $validator);
-    //     }
-
-    //     //login
-
-    //     $credentials = $request->only(['email', 'password']);
-
-    //     $token = Auth::guard('api')->attempt($credentials);
-
-    //     if (!$token)
-    //         return $this->returnError('E001', 'بيانات الدخول غير صحيحة');
-
-    //     $admin = Auth::guard('api')->user();
-    //     $admin->api_token = $token;
-    //     //return token
-    //     return $this->returnData('admin', $admin);
-
-    // } catch (\Exception $ex) {
-    //     return $this->returnError($ex->getCode(), $ex->getMessage());
-    // }
 
 
-        
     }
 
-    public function home (){
 
-        return 'welcome admin';
-
-    }
+   
     public function regester (Request $request){
        $validator = Validator::make($request->all(),[
             'name' => 'required|max:50',
-            'email' => 'required|email|unique:users,email',
+            'email' => 'required|email|unique:admins,email',
             'password' => 'required'
         ]);
         if($validator->fails()){
             return \response()->json($validator->errors(), 422);
         }else{
-            User::create([
+            Admin::create([
                 'name'=> $request->name,
                 'email'=> $request->email,
                 'password'=> $request->password
@@ -104,7 +88,7 @@ class AuthController extends Controller
      
     public function profile(){
 
-        $user =   \auth()->user();
+        $user =   \auth()->guard('admin')->user();
         if(!$user){
             return $this->returnError(404, 'some thing went wrong');
         }
